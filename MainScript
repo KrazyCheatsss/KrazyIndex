@@ -1,0 +1,1230 @@
+local library = loadstring(game:HttpGet("https://raw.githubusercontent.com/depthso/XSX-UI-Library/refs/heads/main/xsx%20lib.lua"))()
+
+library.headerColor = Color3.fromRGB(220, 35, 45)
+library.companyColor = Color3.fromRGB(220, 35, 45)
+library.acientColor = Color3.fromRGB(170, 25, 35)
+library.RainbowEnabled = false
+
+library:Init({
+    version = "1.0",
+    title = "Krazy Index",
+    company = "Krazy Index",
+    keybind = Enum.KeyCode.RightShift,
+    BlurEffect = false
+})
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+
+local SpeedEnabled = false
+local JumpEnabled = false
+local FlyEnabled = false
+
+local Speed = 16
+local JumpHeight = 50
+local FlySpeed = 70
+
+local Chams = false
+local Boxes = false
+local HP = false
+
+local SelectedPlayer = nil
+local CurrentColor = Color3.fromRGB(220, 35, 45)
+
+--========================================================
+-- AIMLOCK SETTINGS
+--========================================================
+
+local AimlockEnabled = false
+local AimlockActive = false
+local AimlockFOV = 150
+local AimlockTarget = nil
+local AimlockPart = "Head"
+
+local FOVCircleEnabled = false
+
+--========================================================
+-- NOTIFICATION POSITION
+--========================================================
+
+task.defer(function()
+    task.wait()
+
+    local GuiParent = game:GetService("CoreGui")
+
+    pcall(function()
+        if RunService:IsStudio() then
+            GuiParent = Player:WaitForChild("PlayerGui")
+        end
+    end)
+
+    for _, Gui in ipairs(GuiParent:GetChildren()) do
+        if Gui:IsA("ScreenGui") then
+            local Layout = Gui:FindFirstChildOfClass("UIListLayout")
+            local Padding = Gui:FindFirstChildOfClass("UIPadding")
+
+            if Layout and Padding then
+                if Padding.PaddingTop.Offset == 18
+                    and Padding.PaddingLeft.Offset == 6 then
+
+                    Layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+                    Layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+
+                    Padding.PaddingTop = UDim.new(0, 0)
+                    Padding.PaddingLeft = UDim.new(0, 0)
+                    Padding.PaddingRight = UDim.new(0, 12)
+                    Padding.PaddingBottom = UDim.new(0, 12)
+
+                    break
+                end
+            end
+        end
+    end
+end)
+
+--========================================================
+-- NOTIFY
+--========================================================
+
+local function Notify(text, duration, type)
+    pcall(function()
+        library:Notify(
+            text,
+            duration or 3,
+            type or "notification"
+        )
+    end)
+end
+
+--========================================================
+-- MAIN TAB
+--========================================================
+
+local MainTab = library:NewTab("Main")
+
+MainTab:NewSection("Movement")
+
+--========================================================
+-- FLY
+--========================================================
+
+local FlyToggle = MainTab:NewToggle("Fly", false, function(value)
+    FlyEnabled = value
+
+    if not value then
+        local Character = Player.Character
+        local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+
+        if Root then
+            Root.AssemblyLinearVelocity = Vector3.zero
+        end
+    end
+end)
+
+FlyToggle:AddKeybind(Enum.KeyCode.F)
+
+MainTab:NewSlider("Fly Speed", "", false, "/", {
+    min = 20,
+    max = 150,
+    default = 70
+}, function(value)
+    FlySpeed = value
+end)
+
+--========================================================
+-- SPEED
+--========================================================
+
+local SpeedToggle = MainTab:NewToggle("Speed", false, function(value)
+    SpeedEnabled = value
+
+    local Character = Player.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+    if Humanoid then
+        Humanoid.WalkSpeed = value and Speed or 16
+    end
+end)
+
+SpeedToggle:AddKeybind(Enum.KeyCode.LeftAlt)
+
+MainTab:NewSlider("Speed", "", false, "/", {
+    min = 16,
+    max = 200,
+    default = 16
+}, function(value)
+    Speed = value
+
+    if SpeedEnabled then
+        local Character = Player.Character
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+        if Humanoid then
+            Humanoid.WalkSpeed = value
+        end
+    end
+end)
+
+--========================================================
+-- JUMP HEIGHT
+--========================================================
+
+local JumpToggle = MainTab:NewToggle("JumpHeight", false, function(value)
+    JumpEnabled = value
+
+    local Character = Player.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+    if Humanoid then
+        Humanoid.UseJumpPower = true
+        Humanoid.JumpPower = value and JumpHeight or 50
+    end
+end)
+
+JumpToggle:AddKeybind(Enum.KeyCode.J)
+
+MainTab:NewSlider("JumpHeight", "", false, "/", {
+    min = 50,
+    max = 250,
+    default = 50
+}, function(value)
+    JumpHeight = value
+
+    if JumpEnabled then
+        local Character = Player.Character
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+        if Humanoid then
+            Humanoid.UseJumpPower = true
+            Humanoid.JumpPower = value
+        end
+    end
+end)
+
+--========================================================
+-- AIMLOCK
+--========================================================
+
+MainTab:NewSection("Aimlock")
+
+local AimlockToggle = MainTab:NewToggle("Aimlock", false, function(value)
+    AimlockEnabled = value
+
+    if not value then
+        AimlockActive = false
+        AimlockTarget = nil
+    end
+end)
+
+-- Q = aimlock key
+AimlockToggle:AddKeybind(Enum.KeyCode.Q)
+
+--========================================================
+-- FOV CIRCLE GUI
+--========================================================
+
+local FOVGui = Instance.new("ScreenGui")
+FOVGui.Name = "Krazy Index_AimlockFOV"
+FOVGui.ResetOnSpawn = false
+FOVGui.IgnoreGuiInset = true
+FOVGui.DisplayOrder = 999
+FOVGui.Parent = Player:WaitForChild("PlayerGui")
+
+local FOVCircle = Instance.new("Frame")
+FOVCircle.Name = "FOVCircle"
+FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVCircle.BackgroundTransparency = 1
+FOVCircle.BorderSizePixel = 0
+FOVCircle.Size = UDim2.fromOffset(
+    AimlockFOV * 2,
+    AimlockFOV * 2
+)
+FOVCircle.Visible = false
+FOVCircle.Parent = FOVGui
+
+local FOVCorner = Instance.new("UICorner")
+FOVCorner.CornerRadius = UDim.new(1, 0)
+FOVCorner.Parent = FOVCircle
+
+local FOVStroke = Instance.new("UIStroke")
+FOVStroke.Thickness = 2
+FOVStroke.Transparency = 0.15
+FOVStroke.Color = CurrentColor
+FOVStroke.Parent = FOVCircle
+
+--========================================================
+-- FOV TOGGLE
+--========================================================
+
+MainTab:NewToggle("FOV Circle", false, function(value)
+    FOVCircleEnabled = value
+    FOVCircle.Visible = value
+end)
+
+--========================================================
+-- FOV SLIDER
+--========================================================
+
+MainTab:NewSlider("Aimlock FOV", "", false, "/", {
+    min = 50,
+    max = 500,
+    default = 150
+}, function(value)
+    AimlockFOV = value
+
+    FOVCircle.Size = UDim2.fromOffset(
+        value * 2,
+        value * 2
+    )
+end)
+
+--========================================================
+-- AIMLOCK TARGET FINDER
+--========================================================
+
+local function GetMousePosition()
+    local MouseLocation = UIS:GetMouseLocation()
+
+    return Vector2.new(
+        MouseLocation.X,
+        MouseLocation.Y
+    )
+end
+
+local function GetClosestAimlockTarget()
+    local Camera = workspace.CurrentCamera
+    local MousePosition = GetMousePosition()
+
+    local ClosestPlayer = nil
+    local ClosestDistance = AimlockFOV
+
+    for _, TargetPlayer in ipairs(Players:GetPlayers()) do
+        if TargetPlayer ~= Player then
+
+            local Character = TargetPlayer.Character
+            local Humanoid = Character
+                and Character:FindFirstChildOfClass("Humanoid")
+
+            local TargetPart = Character
+                and Character:FindFirstChild(AimlockPart)
+
+            if Humanoid
+                and Humanoid.Health > 0
+                and TargetPart then
+
+                local ScreenPosition, OnScreen =
+                    Camera:WorldToViewportPoint(TargetPart.Position)
+
+                if OnScreen then
+
+                    local Distance = (
+                        Vector2.new(
+                            ScreenPosition.X,
+                            ScreenPosition.Y
+                        ) - MousePosition
+                    ).Magnitude
+
+                    if Distance <= ClosestDistance then
+                        ClosestDistance = Distance
+                        ClosestPlayer = TargetPlayer
+                    end
+                end
+            end
+        end
+    end
+
+    return ClosestPlayer
+end
+
+--========================================================
+-- AIMLOCK INPUT - Q TOGGLE
+--========================================================
+
+UIS.InputBegan:Connect(function(Input, Processed)
+    if Processed then
+        return
+    end
+
+    if Input.KeyCode == Enum.KeyCode.Q
+        and AimlockEnabled then
+
+        -- Q again = unlock
+        if AimlockActive then
+            AimlockActive = false
+            AimlockTarget = nil
+
+            Notify("Aimlock Unlocked", 2)
+            return
+        end
+
+        -- First Q = lock onto closest player in FOV
+        local Target = GetClosestAimlockTarget()
+
+        if Target then
+            AimlockTarget = Target
+            AimlockActive = true
+
+            Notify(
+                "Locked: " .. Target.Name,
+                2,
+                "success"
+            )
+        else
+            Notify(
+                "No player in FOV.",
+                2,
+                "error"
+            )
+        end
+    end
+end)
+
+--========================================================
+-- VISUALS
+--========================================================
+
+MainTab:NewSection("Visuals")
+
+local Highlights = {}
+local BoxesList = {}
+local HPBars = {}
+
+local function ClearVisuals()
+
+    for _, Object in pairs(Highlights) do
+        if Object then
+            Object:Destroy()
+        end
+    end
+
+    for _, Object in pairs(BoxesList) do
+        if Object then
+            Object:Destroy()
+        end
+    end
+
+    for _, Object in pairs(HPBars) do
+        if Object then
+            Object:Destroy()
+        end
+    end
+
+    Highlights = {}
+    BoxesList = {}
+    HPBars = {}
+end
+
+local function AddVisual(TargetPlayer)
+
+    if TargetPlayer == Player then
+        return
+    end
+
+    local Character = TargetPlayer.Character
+
+    if not Character then
+        return
+    end
+
+    local Root = Character:FindFirstChild("HumanoidRootPart")
+    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+
+    if not Root or not Humanoid then
+        return
+    end
+
+    -- CHAMS
+    if Chams then
+
+        local Highlight = Instance.new("Highlight")
+
+        Highlight.FillColor = CurrentColor
+        Highlight.OutlineColor = Color3.new(1, 1, 1)
+
+        Highlight.FillTransparency = 0.6
+        Highlight.OutlineTransparency = 0
+
+        Highlight.Adornee = Character
+        Highlight.Parent = Character
+
+        Highlights[TargetPlayer] = Highlight
+    end
+
+    -- BOX
+    if Boxes then
+
+        local Box = Instance.new("BillboardGui")
+
+        Box.Name = "Krazy Index_Box"
+        Box.Size = UDim2.new(0, 70, 0, 100)
+
+        Box.AlwaysOnTop = true
+        Box.Adornee = Root
+        Box.Parent = Player:WaitForChild("PlayerGui")
+
+        local Frame = Instance.new("Frame")
+
+        Frame.Size = UDim2.fromScale(1, 1)
+        Frame.BackgroundTransparency = 1
+        Frame.Parent = Box
+
+        local Stroke = Instance.new("UIStroke")
+
+        Stroke.Color = CurrentColor
+        Stroke.Thickness = 2
+        Stroke.Parent = Frame
+
+        BoxesList[TargetPlayer] = Box
+    end
+
+    -- HP
+    if HP then
+
+        local Bar = Instance.new("BillboardGui")
+
+        Bar.Name = "Krazy Index_HP"
+        Bar.Size = UDim2.new(0, 7, 0, 100)
+        Bar.StudsOffset = Vector3.new(3.5, 0, 0)
+
+        Bar.AlwaysOnTop = true
+        Bar.Adornee = Root
+        Bar.Parent = Player:WaitForChild("PlayerGui")
+
+        local Background = Instance.new("Frame")
+
+        Background.Size = UDim2.fromScale(1, 1)
+        Background.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        Background.BorderSizePixel = 0
+        Background.Parent = Bar
+
+        local Fill = Instance.new("Frame")
+
+        Fill.Name = "Fill"
+        Fill.AnchorPoint = Vector2.new(0, 1)
+        Fill.Position = UDim2.new(0, 0, 1, 0)
+
+        Fill.Size = UDim2.new(1, 0, 1, 0)
+        Fill.BackgroundColor3 = Color3.fromRGB(40, 220, 80)
+        Fill.BorderSizePixel = 0
+
+        Fill.Parent = Background
+
+        HPBars[TargetPlayer] = Bar
+    end
+end
+
+local function UpdateVisuals()
+
+    ClearVisuals()
+
+    for _, TargetPlayer in ipairs(Players:GetPlayers()) do
+        AddVisual(TargetPlayer)
+    end
+end
+
+MainTab:NewToggle("Chams / Highlights Everyone", false, function(value)
+    Chams = value
+    UpdateVisuals()
+end)
+
+MainTab:NewToggle("Box", false, function(value)
+    Boxes = value
+    UpdateVisuals()
+end)
+
+MainTab:NewToggle("HP", false, function(value)
+    HP = value
+    UpdateVisuals()
+end)
+
+--========================================================
+-- PLAYERS TAB
+--========================================================
+
+local PlayersTab = library:NewTab("Players")
+
+local function GetPlayerNames()
+
+    local Names = {}
+
+    for _, TargetPlayer in ipairs(Players:GetPlayers()) do
+        table.insert(Names, TargetPlayer.Name)
+    end
+
+    return Names
+end
+
+local PlayerSelector = PlayersTab:NewSelector(
+    "Select Player",
+    ". . .",
+    GetPlayerNames(),
+    function(value)
+        SelectedPlayer = Players:FindFirstChild(value)
+    end
+)
+
+local function NeedPlayer()
+
+    if not SelectedPlayer then
+        Notify(
+            "Select a player first.",
+            3,
+            "error"
+        )
+
+        return false
+    end
+
+    return true
+end
+
+--========================================================
+-- TELEPORT
+--========================================================
+
+PlayersTab:NewButton("Teleport To Player", function()
+
+    if not NeedPlayer() then
+        return
+    end
+
+    local Character = Player.Character
+    local TargetCharacter = SelectedPlayer.Character
+
+    local Root = Character
+        and Character:FindFirstChild("HumanoidRootPart")
+
+    local TargetRoot = TargetCharacter
+        and TargetCharacter:FindFirstChild("HumanoidRootPart")
+
+    if Root and TargetRoot then
+        Root.CFrame = TargetRoot.CFrame * CFrame.new(0, 0, 3)
+    end
+end)
+
+--========================================================
+-- VIEW
+--========================================================
+
+PlayersTab:NewButton("View Player", function()
+
+    if not NeedPlayer() then
+        return
+    end
+
+    local Character = SelectedPlayer.Character
+
+    local Humanoid = Character
+        and Character:FindFirstChildOfClass("Humanoid")
+
+    if Humanoid then
+        workspace.CurrentCamera.CameraSubject = Humanoid
+    end
+end)
+
+PlayersTab:NewButton("Stop Viewing", function()
+
+    local Character = Player.Character
+
+    local Humanoid = Character
+        and Character:FindFirstChildOfClass("Humanoid")
+
+    if Humanoid then
+        workspace.CurrentCamera.CameraSubject = Humanoid
+    end
+end)
+
+--========================================================
+-- FLING
+--========================================================
+
+PlayersTab:NewButton("Fling", function()
+
+    if not NeedPlayer() then
+        return
+    end
+
+    local Character = Player.Character
+    local TargetCharacter = SelectedPlayer.Character
+
+    local Root = Character
+        and Character:FindFirstChild("HumanoidRootPart")
+
+    local TargetRoot = TargetCharacter
+        and TargetCharacter:FindFirstChild("HumanoidRootPart")
+
+    if Root and TargetRoot then
+
+        Root.CFrame =
+            TargetRoot.CFrame * CFrame.new(0, 0, 4)
+
+        local Velocity = Instance.new("BodyVelocity")
+
+        Velocity.MaxForce =
+            Vector3.new(
+                math.huge,
+                math.huge,
+                math.huge
+            )
+
+        Velocity.Velocity =
+            Vector3.new(0, 100, 0)
+
+        Velocity.Parent = Root
+
+        task.delay(0.3, function()
+
+            if Velocity then
+                Velocity:Destroy()
+            end
+        end)
+    end
+end)
+
+--========================================================
+-- PLAYER Cheat BUTTONS
+--========================================================
+
+PlayersTab:NewButton("Krazy Indexll", function()
+    if NeedPlayer() then
+        Notify(
+            "Krazy Indexll requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Freeze", function()
+    if NeedPlayer() then
+        Notify(
+            "Freeze requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Unfreeze", function()
+    if NeedPlayer() then
+        Notify(
+            "Unfreeze requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Bring", function()
+    if NeedPlayer() then
+        Notify(
+            "Bring requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Respawn", function()
+    if NeedPlayer() then
+        Notify(
+            "Respawn requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Heal", function()
+    if NeedPlayer() then
+        Notify(
+            "Heal requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Force Jump", function()
+    if NeedPlayer() then
+        Notify(
+            "Force Jump requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Sit", function()
+    if NeedPlayer() then
+        Notify(
+            "Sit requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Unsit", function()
+    if NeedPlayer() then
+        Notify(
+            "Unsit requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Invisible", function()
+    if NeedPlayer() then
+        Notify(
+            "Invisible requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("Visible", function()
+    if NeedPlayer() then
+        Notify(
+            "Visible requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+PlayersTab:NewButton("ForceField", function()
+    if NeedPlayer() then
+        Notify(
+            "ForceField requested for " .. SelectedPlayer.Name,
+            3
+        )
+    end
+end)
+
+--========================================================
+-- SETTINGS TAB
+--========================================================
+
+local SettingsTab = library:NewTab("Settings")
+
+local function RecolorGUI(OldColor, NewColor)
+
+    local GuiParents = {}
+
+    pcall(function()
+        table.insert(
+            GuiParents,
+            game:GetService("CoreGui")
+        )
+    end)
+
+    table.insert(
+        GuiParents,
+        Player:WaitForChild("PlayerGui")
+    )
+
+    for _, GuiParent in ipairs(GuiParents) do
+
+        for _, Object in ipairs(
+            GuiParent:GetDescendants()
+        ) do
+
+            pcall(function()
+
+                if Object:IsA("TextLabel")
+                    or Object:IsA("TextButton")
+                    or Object:IsA("TextBox") then
+
+                    if Object.TextColor3 == OldColor then
+                        Object.TextColor3 = NewColor
+                    end
+                end
+
+                if Object:IsA("Frame")
+                    or Object:IsA("TextButton")
+                    or Object:IsA("TextBox") then
+
+                    if Object.BackgroundColor3 == OldColor then
+                        Object.BackgroundColor3 = NewColor
+                    end
+                end
+
+                if Object:IsA("UIStroke") then
+
+                    if Object.Color == OldColor then
+                        Object.Color = NewColor
+                    end
+                end
+
+                if Object:IsA("ScrollingFrame") then
+
+                    if Object.ScrollBarImageColor3 == OldColor then
+                        Object.ScrollBarImageColor3 = NewColor
+                    end
+                end
+
+            end)
+        end
+    end
+end
+
+local function SetColor(Color)
+
+    local OldColor = CurrentColor
+
+    CurrentColor = Color
+
+    library.headerColor = Color
+    library.companyColor = Color
+    library.acientColor = Color
+
+    RecolorGUI(
+        OldColor,
+        Color
+    )
+
+    FOVStroke.Color = Color
+
+    UpdateVisuals()
+end
+
+SettingsTab:NewButton("Red", function()
+    SetColor(Color3.fromRGB(220, 35, 45))
+end)
+
+SettingsTab:NewButton("Purple", function()
+    SetColor(Color3.fromRGB(150, 80, 255))
+end)
+
+SettingsTab:NewButton("Blue", function()
+    SetColor(Color3.fromRGB(50, 130, 255))
+end)
+
+SettingsTab:NewButton("Green", function()
+    SetColor(Color3.fromRGB(45, 200, 100))
+end)
+
+SettingsTab:NewButton("Pink", function()
+    SetColor(Color3.fromRGB(255, 65, 150))
+end)
+
+SettingsTab:NewButton("Orange", function()
+    SetColor(Color3.fromRGB(255, 140, 40))
+end)
+
+--========================================================
+-- RIGHT CTRL CLOSE
+--========================================================
+
+UIS.InputBegan:Connect(function(Input, Processed)
+
+    if Processed then
+        return
+    end
+
+    if Input.KeyCode == Enum.KeyCode.RightControl then
+
+        Notify(
+            "Are U Sure U Want To Close The Menu",
+            1.2
+        )
+
+        task.wait(1.2)
+
+        pcall(function()
+            library:Remove()
+        end)
+    end
+end)
+
+--========================================================
+-- RENDER LOOP
+--========================================================
+
+RunService.RenderStepped:Connect(function()
+
+    local Camera = workspace.CurrentCamera
+
+    --====================================================
+    -- FLY
+    --====================================================
+
+    if FlyEnabled then
+
+        local Character = Player.Character
+
+        local Root = Character
+            and Character:FindFirstChild("HumanoidRootPart")
+
+        if Root then
+
+            local Direction = Vector3.zero
+
+            if UIS:IsKeyDown(Enum.KeyCode.W) then
+                Direction += Camera.CFrame.LookVector
+            end
+
+            if UIS:IsKeyDown(Enum.KeyCode.S) then
+                Direction -= Camera.CFrame.LookVector
+            end
+
+            if UIS:IsKeyDown(Enum.KeyCode.A) then
+                Direction -= Camera.CFrame.RightVector
+            end
+
+            if UIS:IsKeyDown(Enum.KeyCode.D) then
+                Direction += Camera.CFrame.RightVector
+            end
+
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then
+                Direction += Vector3.yAxis
+            end
+
+            if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+                Direction -= Vector3.yAxis
+            end
+
+            if Direction.Magnitude > 0 then
+
+                Root.AssemblyLinearVelocity =
+                    Direction.Unit * FlySpeed
+
+            else
+
+                Root.AssemblyLinearVelocity =
+                    Vector3.zero
+            end
+        end
+    end
+
+    --====================================================
+    -- FOV CIRCLE
+    --====================================================
+
+    if FOVCircle then
+
+        local MousePosition = GetMousePosition()
+
+        FOVCircle.Position =
+            UDim2.fromOffset(
+                MousePosition.X,
+                MousePosition.Y
+            )
+
+        FOVCircle.Size =
+            UDim2.fromOffset(
+                AimlockFOV * 2,
+                AimlockFOV * 2
+            )
+
+        FOVCircle.Visible =
+            FOVCircleEnabled
+
+        FOVStroke.Color =
+            CurrentColor
+    end
+
+    --====================================================
+    -- AIMLOCK
+    --====================================================
+
+    if AimlockEnabled and AimlockActive then
+
+        if not AimlockTarget
+            or not AimlockTarget.Parent
+            or not AimlockTarget.Character then
+
+            AimlockTarget =
+                GetClosestAimlockTarget()
+        end
+
+        if AimlockTarget then
+
+            local Character =
+                AimlockTarget.Character
+
+            local Humanoid =
+                Character
+                and Character:FindFirstChildOfClass(
+                    "Humanoid"
+                )
+
+            local TargetPart =
+                Character
+                and Character:FindFirstChild(
+                    AimlockPart
+                )
+
+            if Humanoid
+                and Humanoid.Health > 0
+                and TargetPart then
+
+                local ScreenPosition, OnScreen =
+                    Camera:WorldToViewportPoint(
+                        TargetPart.Position
+                    )
+
+                if OnScreen then
+
+                    local MousePosition =
+                        GetMousePosition()
+
+                    local Distance =
+                        (
+                            Vector2.new(
+                                ScreenPosition.X,
+                                ScreenPosition.Y
+                            ) - MousePosition
+                        ).Magnitude
+
+                    if Distance <= AimlockFOV then
+
+                        Camera.CFrame =
+                            CFrame.lookAt(
+                                Camera.CFrame.Position,
+                                TargetPart.Position
+                            )
+
+                    else
+
+                        AimlockTarget =
+                            GetClosestAimlockTarget()
+                    end
+
+                else
+
+                    AimlockTarget =
+                        GetClosestAimlockTarget()
+                end
+
+            else
+
+                AimlockTarget =
+                    GetClosestAimlockTarget()
+            end
+        end
+    end
+
+    --====================================================
+    -- HP BARS
+    --====================================================
+
+    for TargetPlayer, Bar in pairs(HPBars) do
+
+        if Bar
+            and Bar.Parent
+            and TargetPlayer.Character then
+
+            local Humanoid =
+                TargetPlayer.Character
+                :FindFirstChildOfClass(
+                    "Humanoid"
+                )
+
+            local Background =
+                Bar:FindFirstChildOfClass(
+                    "Frame"
+                )
+
+            local Fill =
+                Background
+                and Background:FindFirstChild(
+                    "Fill"
+                )
+
+            if Humanoid and Fill then
+
+                Fill.Size =
+                    UDim2.new(
+                        1,
+                        0,
+                        math.clamp(
+                            Humanoid.Health
+                            / Humanoid.MaxHealth,
+                            0,
+                            1
+                        ),
+                        0
+                    )
+            end
+        end
+    end
+end)
+
+--========================================================
+-- CHARACTER RESPAWN
+--========================================================
+
+Player.CharacterAdded:Connect(function(Character)
+
+    task.wait(0.5)
+
+    local Humanoid =
+        Character:FindFirstChildOfClass(
+            "Humanoid"
+        )
+
+    if Humanoid then
+
+        if SpeedEnabled then
+            Humanoid.WalkSpeed = Speed
+        end
+
+        if JumpEnabled then
+
+            Humanoid.UseJumpPower = true
+            Humanoid.JumpPower = JumpHeight
+        end
+    end
+end)
+
+--========================================================
+-- PLAYER JOIN
+--========================================================
+
+Players.PlayerAdded:Connect(function(TargetPlayer)
+
+    task.wait(0.5)
+
+    pcall(function()
+        PlayerSelector:AddOption(
+            TargetPlayer.Name
+        )
+    end)
+
+    if Chams or Boxes or HP then
+
+        task.wait(0.2)
+
+        UpdateVisuals()
+    end
+end)
+
+--========================================================
+-- PLAYER LEAVE
+--========================================================
+
+Players.PlayerRemoving:Connect(function(TargetPlayer)
+
+    pcall(function()
+        PlayerSelector:RemoveOption(
+            TargetPlayer.Name
+        )
+    end)
+
+    if SelectedPlayer == TargetPlayer then
+        SelectedPlayer = nil
+    end
+
+    if Chams or Boxes or HP then
+        UpdateVisuals()
+    end
+
+    if AimlockTarget == TargetPlayer then
+        AimlockTarget = nil
+    end
+end)
+
+--========================================================
+-- LOADED
+--========================================================
+
+Notify(
+    "Loaded Press Rshift To Open/Close",
+    3,
+    "success"
+)
